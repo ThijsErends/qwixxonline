@@ -11,3 +11,16 @@ This is a digital scorecard for Qwixx, designed to replace the physical score sh
 - Digital scorecard for Qwixx
 - Mobile-friendly responsive design
 - Works offline as a PWA
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+```
