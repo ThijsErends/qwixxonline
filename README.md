@@ -1,6 +1,6 @@
 # Qwixx Online
 
-A mobile-friendly progressive web app (PWA) for the dice game Qwixx.
+A mobile-friendly digital scorecard for the dice game Qwixx.
 
 ## About
 
@@ -8,9 +8,19 @@ This is a digital scorecard for Qwixx, designed to replace the physical score sh
 
 ## Features
 
-- Digital scorecard for Qwixx
+- Digital scorecard with Dutch labels (Rood, Geel, Groen, Blauw)
 - Mobile-friendly responsive design
-- Works offline as a PWA
+- Score calculation with automatic totals
+- Row locking when completing a color
+- Penalty tracking (Mislukte Worpen)
+- Reset confirmation to start a new game
+
+## Tech Stack
+
+- React 19
+- Vite 7
+- Tailwind CSS 4
+- lucide-react for icons
 
 ## Development
 
@@ -24,3 +34,7 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## Deployment
+
+The app is automatically deployed to GitHub Pages via GitHub Actions on push to the `main` branch.
