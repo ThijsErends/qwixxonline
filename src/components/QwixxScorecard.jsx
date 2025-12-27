@@ -1,14 +1,92 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { RefreshCw, Lock, AlertCircle, Trophy, Sun, Moon, Monitor, Menu, X, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 
-const QwixxScorecard = () => {
-  // Configuratie van de rijen
-  const rowConfig = {
-    red: { color: 'bg-red-500', text: 'text-white', label: 'Rood', type: 'asc', numbers: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
-    yellow: { color: 'bg-yellow-400', text: 'text-black', label: 'Geel', type: 'asc', numbers: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
-    green: { color: 'bg-green-600', text: 'text-white', label: 'Groen', type: 'desc', numbers: [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2] },
-    blue: { color: 'bg-blue-600', text: 'text-white', label: 'Blauw', type: 'desc', numbers: [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2] }
+// Fisher-Yates shuffle
+const shuffleArray = (array) => {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+// Fixed random patterns for "Gemengd (Vast)" variant
+const fixedRandomNumbers = {
+  red: [7, 2, 11, 4, 9, 6, 12, 3, 8, 5, 10],
+  yellow: [5, 10, 3, 8, 12, 2, 7, 11, 4, 9, 6],
+  green: [9, 4, 11, 2, 7, 10, 5, 12, 3, 6, 8],
+  blue: [6, 12, 5, 8, 3, 10, 2, 9, 7, 4, 11]
+};
+
+// Standard number sequences
+const standardNumbers = {
+  red: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  yellow: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  green: [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2],
+  blue: [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]
+};
+
+// Base config for row colors and labels
+const baseRowConfig = {
+  red: { color: 'bg-red-500', text: 'text-white', label: 'Rood' },
+  yellow: { color: 'bg-yellow-400', text: 'text-black', label: 'Geel' },
+  green: { color: 'bg-green-600', text: 'text-white', label: 'Groen' },
+  blue: { color: 'bg-blue-600', text: 'text-white', label: 'Blauw' }
+};
+
+// Generate dynamic random numbers for all rows
+const generateDynamicNumbers = () => {
+  const baseNumbers = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  return {
+    red: shuffleArray(baseNumbers),
+    yellow: shuffleArray(baseNumbers),
+    green: shuffleArray(baseNumbers),
+    blue: shuffleArray(baseNumbers)
   };
+};
+
+// Build row config based on selected type
+const getRowConfig = (type, dynamicNumbers) => {
+  let numbers;
+  let rowType;
+
+  switch (type) {
+    case 'fixed-random':
+      numbers = fixedRandomNumbers;
+      rowType = 'random';
+      break;
+    case 'dynamic-random':
+      numbers = dynamicNumbers || generateDynamicNumbers();
+      rowType = 'random';
+      break;
+    default: // 'standard'
+      numbers = standardNumbers;
+      rowType = null;
+  }
+
+  return Object.fromEntries(
+    Object.entries(baseRowConfig).map(([key, config]) => [
+      key,
+      {
+        ...config,
+        type: rowType || (key === 'red' || key === 'yellow' ? 'asc' : 'desc'),
+        numbers: numbers[key]
+      }
+    ])
+  );
+};
+
+const QwixxScorecard = () => {
+  // Variant selection state
+  const [selectedType, setSelectedType] = useState('standard');
+  const [dynamicRandomNumbers, setDynamicRandomNumbers] = useState(null);
+
+  // Memoized row config based on selected variant
+  const rowConfig = useMemo(
+    () => getRowConfig(selectedType, dynamicRandomNumbers),
+    [selectedType, dynamicRandomNumbers]
+  );
 
   // State
   const [marks, setMarks] = useState({
@@ -129,11 +207,11 @@ const QwixxScorecard = () => {
     };
   }, [drawerOpen]);
 
-  // Scorecard types for future expansion
+  // Scorecard types
   const scorecardTypes = [
-    { id: 'standard', label: 'Standaard', active: true },
-    { id: 'quick', label: 'Snel Spel', active: false, comingSoon: true },
-    { id: 'duo', label: 'Duo Modus', active: false, comingSoon: true },
+    { id: 'standard', label: 'Standaard' },
+    { id: 'fixed-random', label: 'Gemengd (Vast)' },
+    { id: 'dynamic-random', label: 'Gemengd (Nieuw)' },
   ];
 
   // Score berekening helper (1=1, 2=3, 3=6, etc.)
@@ -143,17 +221,16 @@ const QwixxScorecard = () => {
 
   // Toggle een nummer
   const handleToggle = (color, number) => {
+    const config = rowConfig[color];
     const currentMarks = marks[color];
     const isLocked = locks[color];
-    const rowType = rowConfig[color].type;
 
     // Check of nummer al aangekruist is
     const isMarked = currentMarks.includes(number);
 
     if (isMarked) {
-      // Logic voor uitvinken (mag alleen als het de laatste is)
-      const lastMarked = currentMarks[currentMarks.length - 1];
-      if (number === lastMarked && !isLocked) {
+      // Uitvinken - toegestaan zolang rij niet op slot is
+      if (!isLocked) {
         setMarks(prev => ({
           ...prev,
           [color]: prev[color].filter(n => n !== number)
@@ -165,11 +242,14 @@ const QwixxScorecard = () => {
     // Logic voor aanvinken
     if (isLocked) return; // Rij is dicht
 
-    // Validatie: Nummer moet rechts staan van het laatste kruisje
-    if (currentMarks.length > 0) {
-      const lastMarked = currentMarks[currentMarks.length - 1];
-      if (rowType === 'asc' && number < lastMarked) return;
-      if (rowType === 'desc' && number > lastMarked) return;
+    // Voor random varianten: verplichte links-naar-rechts volgorde
+    if (config.type === 'random') {
+      const numberIndex = config.numbers.indexOf(number);
+      // Check of er al een nummer rechts van dit nummer is aangekruist
+      const hasMarkedToRight = currentMarks.some(m =>
+        config.numbers.indexOf(m) > numberIndex
+      );
+      if (hasMarkedToRight) return; // Mag niet - schendt links-naar-rechts regel
     }
 
     setMarks(prev => ({
@@ -195,9 +275,10 @@ const QwixxScorecard = () => {
     }
 
     // To lock: need 5+ marks and end number marked
+    // End number is always the last (rightmost) number in the row
     const rowMarks = marks[color];
-    const rowType = rowConfig[color].type;
-    const endNumber = rowType === 'asc' ? 12 : 2;
+    const config = rowConfig[color];
+    const endNumber = config.numbers[config.numbers.length - 1];
 
     if (rowMarks.length >= 5 && rowMarks.includes(endNumber)) {
       setLocks(prev => ({ ...prev, [color]: true }));
@@ -209,6 +290,32 @@ const QwixxScorecard = () => {
     setLocks({ red: false, yellow: false, green: false, blue: false });
     setPenalties(0);
     setShowConfirmReset(false);
+
+    // Generate new random numbers for dynamic variant
+    if (selectedType === 'dynamic-random') {
+      setDynamicRandomNumbers(generateDynamicNumbers());
+    }
+  };
+
+  // Handle variant selection from drawer menu
+  const handleTypeSelect = (typeId) => {
+    if (typeId === selectedType) {
+      setDrawerOpen(false);
+      return;
+    }
+
+    setSelectedType(typeId);
+
+    // Generate dynamic numbers if needed
+    if (typeId === 'dynamic-random') {
+      setDynamicRandomNumbers(generateDynamicNumbers());
+    }
+
+    // Reset game state
+    setMarks({ red: [], yellow: [], green: [], blue: [] });
+    setLocks({ red: false, yellow: false, green: false, blue: false });
+    setPenalties(0);
+    setDrawerOpen(false);
   };
 
   // Bereken totaalscores
@@ -254,22 +361,15 @@ const QwixxScorecard = () => {
             {scorecardTypes.map((type) => (
               <button
                 key={type.id}
-                disabled={type.comingSoon}
+                onClick={() => handleTypeSelect(type.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors ${
-                  type.active
+                  selectedType === type.id
                     ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium'
-                    : type.comingSoon
-                    ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <span>{type.label}</span>
-                {type.comingSoon && (
-                  <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded">
-                    Soon
-                  </span>
-                )}
-                {type.active && <ChevronRight size={16} />}
+                {selectedType === type.id && <ChevronRight size={16} />}
               </button>
             ))}
           </nav>
@@ -344,7 +444,6 @@ const QwixxScorecard = () => {
         {Object.entries(rowConfig).map(([colorKey, config]) => {
           const isRowLocked = locks[colorKey];
           const rowMarks = marks[colorKey];
-          const lastMarked = rowMarks.length > 0 ? rowMarks[rowMarks.length - 1] : null;
 
           return (
             <div key={colorKey} className="flex-1 max-h-[100px] rounded-lg overflow-hidden shadow-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col min-h-0">
@@ -361,14 +460,8 @@ const QwixxScorecard = () => {
               <div className="flex-1 p-1 grid grid-cols-12 gap-0.5 bg-slate-50 dark:bg-slate-800/50 min-h-0">
                 {config.numbers.map((num) => {
                   const isMarked = rowMarks.includes(num);
-                  let isDisabled = false;
-
-                  if (isRowLocked && !isMarked) isDisabled = true;
-
-                  if (!isMarked && lastMarked !== null) {
-                    if (config.type === 'asc' && num < lastMarked) isDisabled = true;
-                    if (config.type === 'desc' && num > lastMarked) isDisabled = true;
-                  }
+                  // Alleen disabled als rij op slot is en vak niet gemarkeerd
+                  const isDisabled = isRowLocked && !isMarked;
 
                   return (
                     <button
@@ -390,7 +483,8 @@ const QwixxScorecard = () => {
 
                 {/* Lock button at end of row */}
                 {(() => {
-                  const endNumber = config.type === 'asc' ? 12 : 2;
+                  // End number is always the last (rightmost) in the row
+                  const endNumber = config.numbers[config.numbers.length - 1];
                   const canLock = rowMarks.length >= 5 && rowMarks.includes(endNumber);
                   return (
                     <button
